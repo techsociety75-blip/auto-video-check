@@ -21,7 +21,7 @@ export async function loadStore(): Promise<Store> {
   }
 }
 
-export async function saveStore(store: Store): Promise<void> {
+export async function saveStore(store: Store): Promise<{ url: string; etag: string; uploadedSize: number }> {
   const hasStaticToken = !!process.env.BLOB_READ_WRITE_TOKEN;
   const hasOidcAuth = !!process.env.BLOB_STORE_ID; // VERCEL_OIDC_TOKEN is set automatically by Vercel at runtime
 
@@ -31,16 +31,20 @@ export async function saveStore(store: Store): Promise<void> {
     );
   }
 
+  const payload = JSON.stringify(store, null, 2);
+
   // Write directly with allowOverwrite - no delete-then-put race. A
   // delete immediately followed by a put can cause the very next read to
   // hit a stale "not found" cache entry from the delete, which is why
   // newly added videos were disappearing immediately after being saved.
-  await put(STORE_PATH, JSON.stringify(store, null, 2), {
+  const result = await put(STORE_PATH, payload, {
     access: 'private',
     contentType: 'application/json',
     allowOverwrite: true,
     cacheControlMaxAge: 0,
   });
+
+  return { url: result.url, etag: result.etag, uploadedSize: payload.length };
 }
 
 async function streamToString(stream: ReadableStream<Uint8Array>): Promise<string> {

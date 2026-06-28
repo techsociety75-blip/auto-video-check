@@ -29,9 +29,9 @@ export async function POST(req: NextRequest) {
 
     const video = makeNewVideo(url, label);
     store.videos.unshift(video);
-    await saveStore(store);
+    const saveResult = await saveStore(store);
 
-    return NextResponse.json({ video }, { status: 201 });
+    return NextResponse.json({ video, saveResult }, { status: 201 });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown server error';
     console.error('Failed to add video:', message);
