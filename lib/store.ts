@@ -19,9 +19,12 @@ export async function loadStore(): Promise<Store> {
 }
 
 export async function saveStore(store: Store): Promise<void> {
-  if (!process.env.BLOB_READ_WRITE_TOKEN) {
+  const hasStaticToken = !!process.env.BLOB_READ_WRITE_TOKEN;
+  const hasOidcAuth = !!process.env.BLOB_STORE_ID; // VERCEL_OIDC_TOKEN is set automatically by Vercel at runtime
+
+  if (!hasStaticToken && !hasOidcAuth) {
     throw new Error(
-      'BLOB_READ_WRITE_TOKEN is not set. Connect a Vercel Blob store to this project (Storage tab in the Vercel dashboard) and redeploy.'
+      'No Blob store credentials found (checked BLOB_READ_WRITE_TOKEN and BLOB_STORE_ID). Connect a Vercel Blob store to this project (Storage tab in the Vercel dashboard) and redeploy.'
     );
   }
 
