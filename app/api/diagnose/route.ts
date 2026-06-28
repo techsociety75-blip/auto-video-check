@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { loadStore } from '@/lib/store';
 
 export async function GET() {
   const check = (name: string) => {
@@ -13,6 +14,14 @@ export async function GET() {
   const blobStoreId = check('BLOB_STORE_ID');
   const vercelOidcToken = check('VERCEL_OIDC_TOKEN');
 
+  let storeContents: unknown = null;
+  let storeError: string | null = null;
+  try {
+    storeContents = await loadStore();
+  } catch (err) {
+    storeError = err instanceof Error ? err.message : 'Unknown error reading store';
+  }
+
   return NextResponse.json({
     BLOB_READ_WRITE_TOKEN: blobReadWriteToken,
     BLOB_STORE_ID: blobStoreId,
@@ -21,5 +30,7 @@ export async function GET() {
     TELEGRAM_BOT_TOKEN: check('TELEGRAM_BOT_TOKEN'),
     TELEGRAM_CHAT_ID: check('TELEGRAM_CHAT_ID'),
     CRON_SECRET: check('CRON_SECRET'),
+    currentStoreContents: storeContents,
+    storeReadError: storeError,
   });
 }

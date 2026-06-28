@@ -1,10 +1,13 @@
-import { put, del, get } from '@vercel/blob';
+import { put, get } from '@vercel/blob';
 import type { Store } from './types';
 
 const STORE_PATH = 'tiktok-tracker/store.json';
 
 export async function loadStore(): Promise<Store> {
   try {
+    // cacheControlMaxAge: 0 on put() (set below) keeps this fresh; we also
+    // avoid any caching here by always hitting the Blob API directly rather
+    // than fetching a cached public URL.
     const result = await get(STORE_PATH, { access: 'private' });
     if (!result || result.statusCode !== 200 || !result.stream) {
       return { videos: [] };
@@ -28,19 +31,15 @@ export async function saveStore(store: Store): Promise<void> {
     );
   }
 
-  // Delete any existing blob at this path first, then write fresh. This
-  // avoids depending on the `allowOverwrite` option, which is only present
-  // in newer @vercel/blob SDK versions - deleting first works the same way
-  // regardless of installed SDK version.
-  try {
-    await del(STORE_PATH);
-  } catch {
-    // No existing blob to delete, or delete failed - proceed to write anyway.
-  }
-
+  // Write directly with allowOverwrite - no delete-then-put race. A
+  // delete immediately followed by a put can cause the very next read to
+  // hit a stale "not found" cache entry from the delete, which is why
+  // newly added videos were disappearing immediately after being saved.
   await put(STORE_PATH, JSON.stringify(store, null, 2), {
     access: 'private',
     contentType: 'application/json',
+    allowOverwrite: true,
+    cacheControlMaxAge: 0,
   });
 }
 
