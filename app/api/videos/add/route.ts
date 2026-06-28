@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { loadStore, saveStore } from '@/lib/store';
+import { mutateStore } from '@/lib/store';
 import { makeNewVideo } from '@/lib/scheduler';
+import type { TrackedVideo } from '@/lib/types';
 
 export async function POST(req: NextRequest) {
   try {
@@ -18,20 +19,28 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const store = await loadStore();
+    let duplicateError = false;
+    let addedVideo: TrackedVideo | null = null;
 
-    if (store.videos.some((v) => v.url === url && v.status !== 'finished')) {
+    const { result, saveResult } = await mutateStore((store) => {
+      if (store.videos.some((v) => v.url === url && v.status !== 'finished')) {
+        duplicateError = true;
+        return null;
+      }
+      const video = makeNewVideo(url, label);
+      store.videos.unshift(video);
+      addedVideo = video;
+      return video;
+    });
+
+    if (duplicateError) {
       return NextResponse.json(
         { error: 'This URL is already being tracked' },
         { status: 409 }
       );
     }
 
-    const video = makeNewVideo(url, label);
-    store.videos.unshift(video);
-    const saveResult = await saveStore(store);
-
-    return NextResponse.json({ video, saveResult }, { status: 201 });
+    return NextResponse.json({ video: result ?? addedVideo, saveResult }, { status: 201 });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown server error';
     console.error('Failed to add video:', message);
