@@ -1,26 +1,16 @@
-import { put, head, del } from '@vercel/blob';
+import { put, del, get } from '@vercel/blob';
 import type { Store } from './types';
 
 const STORE_PATH = 'tiktok-tracker/store.json';
 
-async function fetchBlobUrl(): Promise<string | null> {
-  try {
-    const info = await head(STORE_PATH);
-    return info?.url ?? null;
-  } catch {
-    return null;
-  }
-}
-
 export async function loadStore(): Promise<Store> {
-  const url = await fetchBlobUrl();
-  if (!url) {
-    return { videos: [] };
-  }
   try {
-    const res = await fetch(url, { cache: 'no-store' });
-    if (!res.ok) return { videos: [] };
-    const data = (await res.json()) as Store;
+    const result = await get(STORE_PATH, { access: 'private' });
+    if (!result || result.statusCode !== 200 || !result.stream) {
+      return { videos: [] };
+    }
+    const text = await streamToString(result.stream);
+    const data = JSON.parse(text) as Store;
     if (!data.videos) return { videos: [] };
     return data;
   } catch {
@@ -46,7 +36,25 @@ export async function saveStore(store: Store): Promise<void> {
   }
 
   await put(STORE_PATH, JSON.stringify(store, null, 2), {
-    access: 'public',
+    access: 'private',
     contentType: 'application/json',
   });
+}
+
+async function streamToString(stream: ReadableStream<Uint8Array>): Promise<string> {
+  const reader = stream.getReader();
+  const chunks: Uint8Array[] = [];
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (value) chunks.push(value);
+  }
+  const total = chunks.reduce((sum, c) => sum + c.length, 0);
+  const merged = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    merged.set(chunk, offset);
+    offset += chunk.length;
+  }
+  return new TextDecoder().decode(merged);
 }
