@@ -15,50 +15,56 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const store = await loadStore();
-  const now = new Date();
-  const results: Array<{ id: string; url: string; status: string }> = [];
+  try {
+    const store = await loadStore();
+    const now = new Date();
+    const results: Array<{ id: string; url: string; status: string }> = [];
 
-  for (let i = 0; i < store.videos.length; i++) {
-    const video = store.videos[i];
+    for (let i = 0; i < store.videos.length; i++) {
+      const video = store.videos[i];
 
-    // Close out videos whose 7-day window has ended without removal.
-    if (
-      video.status !== 'removed' &&
-      video.status !== 'finished' &&
-      now.getTime() > new Date(video.trackingEndsAt).getTime()
-    ) {
-      store.videos[i] = { ...video, status: 'finished' };
-      continue;
-    }
+      // Close out videos whose 7-day window has ended without removal.
+      if (
+        video.status !== 'removed' &&
+        video.status !== 'finished' &&
+        now.getTime() > new Date(video.trackingEndsAt).getTime()
+      ) {
+        store.videos[i] = { ...video, status: 'finished' };
+        continue;
+      }
 
-    if (!isDue(video, now)) continue;
+      if (!isDue(video, now)) continue;
 
-    const result = await checkTikTokVideo(video.url);
-    const updated = applyCheckResult(video, result, now);
-    store.videos[i] = updated;
-    results.push({ id: updated.id, url: updated.url, status: updated.status });
+      const result = await checkTikTokVideo(video.url);
+      const updated = applyCheckResult(video, result, now);
+      store.videos[i] = updated;
+      results.push({ id: updated.id, url: updated.url, status: updated.status });
 
-    // Fire Telegram notification exactly once per removal event.
-    if (updated.status === 'removed' && updated.notified === false) {
-      const label = updated.label ? `${updated.label}\n` : '';
-      const message =
-        `🚨 <b>TikTok video removed</b>\n` +
-        `${label}${updated.url}\n\n` +
-        `Detected: ${now.toUTCString()}\n` +
-        `Will keep re-checking every 3 hours until a new link is added.`;
-      const sent = await sendTelegramMessage(message);
-      if (sent) {
-        store.videos[i] = { ...updated, notified: true };
+      // Fire Telegram notification exactly once per removal event.
+      if (updated.status === 'removed' && updated.notified === false) {
+        const label = updated.label ? `${updated.label}\n` : '';
+        const message =
+          `🚨 <b>TikTok video removed</b>\n` +
+          `${label}${updated.url}\n\n` +
+          `Detected: ${now.toUTCString()}\n` +
+          `Will keep re-checking every 3 hours until a new link is added.`;
+        const sent = await sendTelegramMessage(message);
+        if (sent) {
+          store.videos[i] = { ...updated, notified: true };
+        }
       }
     }
+
+    await saveStore(store);
+
+    return NextResponse.json({
+      checkedAt: now.toISOString(),
+      checked: results.length,
+      results,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown server error';
+    console.error('Cron check failed:', message);
+    return NextResponse.json({ error: message }, { status: 500 });
   }
-
-  await saveStore(store);
-
-  return NextResponse.json({
-    checkedAt: now.toISOString(),
-    checked: results.length,
-    results,
-  });
 }

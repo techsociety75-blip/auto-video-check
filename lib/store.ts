@@ -29,6 +29,12 @@ export async function loadStore(): Promise<Store> {
 }
 
 export async function saveStore(store: Store): Promise<void> {
+  if (!process.env.BLOB_READ_WRITE_TOKEN) {
+    throw new Error(
+      'BLOB_READ_WRITE_TOKEN is not set. Connect a Vercel Blob store to this project (Storage tab in the Vercel dashboard) and redeploy.'
+    );
+  }
+
   // Delete any existing blob at this path first, then write fresh. This
   // avoids depending on the `allowOverwrite` option, which is only present
   // in newer @vercel/blob SDK versions - deleting first works the same way
